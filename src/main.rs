@@ -4,7 +4,11 @@ extern crate ncurses;
 use std::{thread::sleep, time::Duration};
 
 use domain::{branch_type::BranchType, config::BaseType};
-use ncurses::*;
+use ncurses::{
+    cbreak, curs_set, del_panel, delwin, doupdate, getmaxy, getmaxyx, has_colors, init_pair,
+    mvwprintw, new_panel, newwin, nodelay, noecho, savetty, start_color, stdscr, update_panels,
+    use_default_colors, wattroff, wattron, wprintw, A_BOLD, COLORS, COLOR_BLACK, COLOR_PAIR, ERR,
+};
 use rand::Rng;
 
 use crate::domain::{config::Config, counters::Counters, ncurses_objects::NcursesObjects};
@@ -111,7 +115,7 @@ impl Tree {
             life -= 1;
             let age = self.config.life_start - life;
 
-            (dx, dy) = self.set_deltas(branch_type, life, age, self.config.multiplier);
+            (dx, dy) = Self::set_deltas(branch_type, life, age, self.config.multiplier);
 
             let max_y = getmaxy(self.objects.tree_win);
             if dy > 0 && y > (max_y - 2) {
@@ -196,7 +200,7 @@ impl Tree {
             self.choose_color(branch_type);
 
             // choose string to use for this branch
-            let branchstr = self.choose_string(branch_type, life, dx, dy);
+            let branchstr = Self::choose_string(branch_type, life, dx, dy);
 
             mvwprintw(self.objects.tree_win, y, x, branchstr);
             wattroff(self.objects.tree_win, A_BOLD());
@@ -204,13 +208,7 @@ impl Tree {
         }
     }
 
-    fn set_deltas(
-        &self,
-        branch_type: BranchType,
-        life: i32,
-        age: i32,
-        multiplier: i32,
-    ) -> (i32, i32) {
+    fn set_deltas(branch_type: BranchType, life: i32, age: i32, multiplier: i32) -> (i32, i32) {
         let mut dx = 0;
         let mut dy = 0;
         match branch_type {
@@ -221,24 +219,24 @@ impl Tree {
                     dx = (rand() % 3) - 1;
                 }
                 // young trunk should grow wide
-                else if (age < (multiplier * 3)) {
+                else if age < multiplier * 3 {
                     // every (multiplier * 0.8) steps, raise tree to next level
-                    if (age % ((multiplier as f32 * 0.5) as i32) == 0) {
+                    if age % (multiplier as f32 * 0.5) as i32 == 0 {
                         dy = -1;
                     } else {
                         dy = 0;
                     }
 
                     let roll = dice(10);
-                    if (roll >= 0 && roll <= 0) {
+                    if roll >= 0 && roll <= 0 {
                         dx = -2;
-                    } else if (roll >= 1 && roll <= 3) {
+                    } else if roll >= 1 && roll <= 3 {
                         dx = -1;
-                    } else if (roll >= 4 && roll <= 5) {
+                    } else if roll >= 4 && roll <= 5 {
                         dx = 0;
-                    } else if (roll >= 6 && roll <= 8) {
+                    } else if roll >= 6 && roll <= 8 {
                         dx = 1;
-                    } else if (roll >= 9 && roll <= 9) {
+                    } else if roll >= 9 && roll <= 9 {
                         dx = 2;
                     }
                 }
@@ -260,7 +258,7 @@ impl Tree {
                     dy = -1;
                 } else if roll >= 2 && roll <= 7 {
                     dy = 0;
-                } else if (roll >= 8 && roll <= 9) {
+                } else if roll >= 8 && roll <= 9 {
                     dy = 1;
                 }
 
@@ -278,61 +276,61 @@ impl Tree {
             BranchType::ShootRight => {
                 // right shoot: trend right and little vertical movement
                 let roll = dice(10);
-                if (roll >= 0 && roll <= 1) {
+                if roll >= 0 && roll <= 1 {
                     dy = -1;
-                } else if (roll >= 2 && roll <= 7) {
+                } else if roll >= 2 && roll <= 7 {
                     dy = 0;
-                } else if (roll >= 8 && roll <= 9) {
+                } else if roll >= 8 && roll <= 9 {
                     dy = 1;
                 }
 
                 let roll = dice(10);
-                if (roll >= 0 && roll <= 1) {
+                if roll >= 0 && roll <= 1 {
                     dx = 2;
-                } else if (roll >= 2 && roll <= 5) {
+                } else if roll >= 2 && roll <= 5 {
                     dx = 1;
-                } else if (roll >= 6 && roll <= 8) {
+                } else if roll >= 6 && roll <= 8 {
                     dx = 0;
-                } else if (roll >= 9 && roll <= 9) {
+                } else if roll >= 9 && roll <= 9 {
                     dx = -1;
                 }
             }
             BranchType::Dying => {
                 // dying: discourage vertical growth(?); trend left/right (-3,3)
                 let roll = dice(10);
-                if (roll >= 0 && roll <= 1) {
+                if roll >= 0 && roll <= 1 {
                     dy = -1;
-                } else if (roll >= 2 && roll <= 8) {
+                } else if roll >= 2 && roll <= 8 {
                     dy = 0;
-                } else if (roll >= 9 && roll <= 9) {
+                } else if roll >= 9 && roll <= 9 {
                     dy = 1;
                 }
 
                 let roll = dice(15);
-                if (roll >= 0 && roll <= 0) {
+                if roll >= 0 && roll <= 0 {
                     dx = -3;
-                } else if (roll >= 1 && roll <= 2) {
+                } else if roll >= 1 && roll <= 2 {
                     dx = -2;
-                } else if (roll >= 3 && roll <= 5) {
+                } else if roll >= 3 && roll <= 5 {
                     dx = -1;
-                } else if (roll >= 6 && roll <= 8) {
+                } else if roll >= 6 && roll <= 8 {
                     dx = 0;
-                } else if (roll >= 9 && roll <= 11) {
+                } else if roll >= 9 && roll <= 11 {
                     dx = 1;
-                } else if (roll >= 12 && roll <= 13) {
+                } else if roll >= 12 && roll <= 13 {
                     dx = 2;
-                } else if (roll >= 14 && roll <= 14) {
+                } else if roll >= 14 && roll <= 14 {
                     dx = 3;
                 }
             }
             BranchType::Dead => {
                 // dead: fill in surrounding area
                 let roll = dice(10);
-                if (roll >= 0 && roll <= 2) {
+                if roll >= 0 && roll <= 2 {
                     dy = -1;
-                } else if (roll >= 3 && roll <= 6) {
+                } else if roll >= 3 && roll <= 6 {
                     dy = 0;
-                } else if (roll >= 7 && roll <= 9) {
+                } else if roll >= 7 && roll <= 9 {
                     dy = 1;
                 }
                 dx = (dice(3)) - 1;
@@ -369,12 +367,11 @@ impl Tree {
     }
 
     const fn choose_string(
-        &self,
         mut branch_type: BranchType,
         life: i32,
         dx: i32,
         dy: i32,
-    ) -> &str {
+    ) -> &'static str {
         let fallback_char = "?";
 
         if life < 4 {
