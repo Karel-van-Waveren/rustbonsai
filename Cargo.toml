@@ -1,0 +1,13 @@
+[package]
+name = "rustbonsai"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.71"
+ncurses = { version = "5.101.0", features = ["panel", "extended_colors", "wide", "wide_chtype"] }
+rand = "0.8.5"
+
+# pancurses = "0.17.0"
