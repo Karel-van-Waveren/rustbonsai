@@ -39,7 +39,7 @@ impl Default for Config {
             load: Default::default(),
             target_branch_count: Default::default(),
             time_wait: 4,
-            time_step: 0,
+            time_step: 2,
             message: String::default(),
             leaves: ["&"; 64],
             save_file: String::default(),
