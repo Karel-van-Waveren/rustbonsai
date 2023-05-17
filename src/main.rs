@@ -406,5 +406,5 @@ fn dice(sides: i32) -> i32 {
     rand() % sides
 }
 fn rand() -> i32 {
-    rand::thread_rng().gen::<i32>()
+    rand::thread_rng().gen::<i32>().abs()
 }
