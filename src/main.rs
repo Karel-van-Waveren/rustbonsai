@@ -5,9 +5,10 @@ use std::{thread::sleep, time::Duration};
 
 use domain::{branch_type::BranchType, config::BaseType};
 use ncurses::{
-    cbreak, curs_set, del_panel, delwin, doupdate, getmaxy, getmaxyx, has_colors, init_pair,
-    mvwprintw, new_panel, newwin, nodelay, noecho, savetty, start_color, stdscr, update_panels,
-    use_default_colors, wattroff, wattron, wprintw, A_BOLD, COLORS, COLOR_BLACK, COLOR_PAIR, ERR,
+    cbreak, clear, curs_set, del_panel, delwin, doupdate, endwin, getmaxy, getmaxyx, has_colors,
+    init_pair, mvwprintw, new_panel, newwin, nodelay, noecho, overlay, overwrite, refresh, savetty,
+    start_color, stdscr, timeout, update_panels, use_default_colors, wattroff, wattron, wgetch,
+    wprintw, A_BOLD, COLORS, COLOR_BLACK, COLOR_PAIR, ERR,
 };
 use rand::Rng;
 use set_deltas::set_deltas;
@@ -19,11 +20,46 @@ mod set_deltas;
 
 fn main() {
     let mut tree = Tree::default();
-    tree.init();
-    tree.grow_tree();
     loop {
-        sleep(Duration::from_millis(1));
+        tree.init();
+        tree.grow_tree();
+        if tree.config.load {
+            tree.config.target_branch_count = 0;
+        }
+        if tree.config.infinite {
+            timeout(tree.config.time_wait * 1000);
+            if tree.check_key_press() {
+                break;
+            }
+        }
+        if !tree.config.infinite {
+            break;
+        }
     }
+
+    if tree.config.print_tree {
+        tree.finish();
+
+        // overlay all windows onto stdscr
+        overlay(tree.objects.base_win, stdscr());
+        overlay(tree.objects.tree_win, stdscr());
+        overwrite(tree.objects.message_border_win, stdscr());
+        overwrite(tree.objects.message_win, stdscr());
+
+        printstdscr();
+    } else {
+        wgetch(tree.objects.tree_win);
+        tree.finish();
+    }
+
+    loop {
+        sleep(Duration::from_secs(1));
+    }
+}
+
+// print stdscr to terminal window
+fn printstdscr() {
+    todo!()
 }
 
 #[derive(Default)]
@@ -87,7 +123,7 @@ impl Tree {
         self.counters.branches = 0;
         self.counters.shoot_counter = rand();
 
-        if self.config.verbosity > 0 {
+        if self.config.verbose {
             mvwprintw(
                 self.objects.tree_win,
                 2,
@@ -156,7 +192,7 @@ impl Tree {
                     // first shoot is randomly directed
                     self.counters.shoots += 1;
                     self.counters.shoot_counter += 1;
-                    if self.config.verbosity > 0 {
+                    if self.config.verbose {
                         mvwprintw(
                             self.objects.tree_win,
                             4,
@@ -165,7 +201,7 @@ impl Tree {
                         );
                     }
                     // create shoot
-                    let direction = match self.counters.shoot_counter % 2 {
+                    let direction = match dice(2) {
                         0 => BranchType::ShootLeft,
                         1 => BranchType::ShootRight,
                         _ => BranchType::Dead,
@@ -175,7 +211,7 @@ impl Tree {
             }
             shoot_cooldown -= 1;
 
-            if self.config.verbosity > 0 {
+            if self.config.verbose {
                 mvwprintw(self.objects.tree_win, 5, 5, format!("dx: {dx}").as_str());
                 mvwprintw(self.objects.tree_win, 6, 5, format!("dy: {dy}").as_str());
                 mvwprintw(
@@ -188,7 +224,7 @@ impl Tree {
                     self.objects.tree_win,
                     8,
                     5,
-                    format!("shootCooldown: % {shoot_cooldown}").as_str(),
+                    format!("shootCooldown: {shoot_cooldown:?}").as_str(),
                 );
             }
 
@@ -199,11 +235,13 @@ impl Tree {
             self.choose_color(branch_type);
 
             // choose string to use for this branch
-            let branchstr = Self::choose_string(branch_type, life, dx, dy);
+            let branchstr = self.choose_string(branch_type, life, dx, dy);
 
             mvwprintw(self.objects.tree_win, y, x, branchstr);
             wattroff(self.objects.tree_win, A_BOLD());
-            update_screen(self.config.time_step);
+            if self.config.live {
+                update_screen(self.config.time_step);
+            }
         }
     }
 
@@ -211,21 +249,21 @@ impl Tree {
     fn choose_color(&self, branch_type: BranchType) {
         match branch_type {
             BranchType::Trunk | BranchType::ShootLeft | BranchType::ShootRight => {
-                if rand() % 2 == 0 {
+                if dice(2) == 0 {
                     wattron(self.objects.tree_win, A_BOLD() | COLOR_PAIR(11));
                 } else {
                     wattron(self.objects.tree_win, COLOR_PAIR(3));
                 }
             }
             BranchType::Dying => {
-                if rand() % 10 == 0 {
+                if dice(10) == 0 {
                     wattron(self.objects.tree_win, A_BOLD() | COLOR_PAIR(2));
                 } else {
                     wattron(self.objects.tree_win, COLOR_PAIR(2));
                 }
             }
             BranchType::Dead => {
-                if rand() % 3 == 0 {
+                if dice(3) == 0 {
                     wattron(self.objects.tree_win, A_BOLD() | COLOR_PAIR(10));
                 } else {
                     wattron(self.objects.tree_win, COLOR_PAIR(10));
@@ -234,12 +272,7 @@ impl Tree {
         }
     }
 
-    const fn choose_string(
-        mut branch_type: BranchType,
-        life: i32,
-        dx: i32,
-        dy: i32,
-    ) -> &'static str {
+    fn choose_string(&self, mut branch_type: BranchType, life: i32, dx: i32, dy: i32) -> &str {
         let fallback_char = "?";
 
         if life < 4 {
@@ -291,9 +324,11 @@ impl Tree {
                 }
             }
             BranchType::Dying | BranchType::Dead => {
-                // strncpy(branchStr, conf->leaves[rand() % conf->leavesSize], maxStrLen - 1);
-                // branchStr[maxStrLen - 1] = '\0';
-                "&"
+                if self.config.leaves_size > 0 {
+                    &self.config.leaves[..=(dice(self.config.leaves_size) as usize)]
+                } else {
+                    ""
+                }
             }
         }
     }
@@ -393,13 +428,32 @@ impl Tree {
             }
         }
     }
+
+    fn check_key_press(&self) -> bool {
+        if (self.config.screensaver && wgetch(stdscr()) != ERR) || (wgetch(stdscr()) == 'q' as i32)
+        {
+            self.finish();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn finish(&self) {
+        clear();
+        refresh();
+        endwin();
+        if self.config.save {
+            // saveToFile
+        }
+    }
 }
 
 fn update_screen(time_step: u64) {
     update_panels();
     doupdate();
     if time_step > 0 {
-        sleep(Duration::from_millis(time_step));
+        sleep(Duration::from_micros(time_step));
     }
 }
 fn dice(sides: i32) -> i32 {
@@ -408,3 +462,5 @@ fn dice(sides: i32) -> i32 {
 fn rand() -> i32 {
     rand::thread_rng().gen::<i32>().abs()
 }
+
+// check for key press
