@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 extern crate ncurses;
-use std::{thread::sleep, time::Duration};
+use std::{sync::Mutex, thread::sleep, time::Duration};
 
 use domain::{branch_type::BranchType, config::BaseType};
 use ncurses::{
@@ -10,7 +10,8 @@ use ncurses::{
     start_color, stdscr, timeout, update_panels, use_default_colors, wattroff, wattron, wgetch,
     wprintw, A_BOLD, COLORS, COLOR_BLACK, COLOR_PAIR, ERR,
 };
-use rand::Rng;
+use once_cell::sync::OnceCell;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use set_deltas::set_deltas;
 
 use crate::domain::{config::Config, counters::Counters, ncurses_objects::NcursesObjects};
@@ -18,8 +19,18 @@ use crate::domain::{config::Config, counters::Counters, ncurses_objects::Ncurses
 mod domain;
 mod set_deltas;
 
+static RNG: OnceCell<Mutex<StdRng>> = OnceCell::new();
+
 fn main() {
     let mut tree = Tree::default();
+
+    if tree.config.seed == 0 {
+        tree.config.seed = rand::thread_rng().gen::<u64>();
+    }
+
+    RNG.set(Mutex::new(StdRng::seed_from_u64(tree.config.seed)))
+        .unwrap();
+
     loop {
         tree.init();
         tree.grow_tree();
@@ -429,6 +440,7 @@ impl Tree {
         }
     }
 
+    // check for key press
     fn check_key_press(&self) -> bool {
         if (self.config.screensaver && wgetch(stdscr()) != ERR) || (wgetch(stdscr()) == 'q' as i32)
         {
@@ -460,7 +472,5 @@ fn dice(sides: i32) -> i32 {
     rand() % sides
 }
 fn rand() -> i32 {
-    rand::thread_rng().gen::<i32>().abs()
+    RNG.get().unwrap().lock().unwrap().gen::<i32>().abs()
 }
-
-// check for key press

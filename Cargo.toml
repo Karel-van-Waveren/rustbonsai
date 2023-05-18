@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.71"
 ncurses = { version = "5.101.0", features = ["panel", "extended_colors", "wide", "wide_chtype"] }
+once_cell = "1.17.1"
 rand = "0.8.5"
 
 # pancurses = "0.17.0"

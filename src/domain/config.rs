@@ -1,3 +1,4 @@
+#[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     pub live: bool,
     pub infinite: bool,
@@ -7,7 +8,7 @@ pub struct Config {
     pub life_start: i32,
     pub multiplier: i32,
     pub base_type: BaseType,
-    pub seed: i32,
+    pub seed: u64,
     pub leaves_size: i32,
     pub save: bool,
     pub load: bool,
@@ -39,7 +40,7 @@ impl Default for Config {
             load: Default::default(),
             target_branch_count: Default::default(),
             time_wait: 4,
-            time_step: 100,
+            time_step: 1000,
             message: String::default(),
             leaves: ['&'; 64].iter().collect(),
             save_file: String::default(),
