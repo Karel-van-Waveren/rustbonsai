@@ -6,9 +6,10 @@ use std::{sync::Mutex, thread::sleep, time::Duration};
 use domain::{branch_type::BranchType, config::BaseType};
 use ncurses::{
     cbreak, clear, curs_set, del_panel, delwin, doupdate, endwin, getmaxy, getmaxyx, has_colors,
-    init_pair, mvwprintw, new_panel, newwin, nodelay, noecho, overlay, overwrite, refresh, savetty,
-    start_color, stdscr, timeout, update_panels, use_default_colors, wattroff, wattron, wgetch,
-    wprintw, A_BOLD, COLORS, COLOR_BLACK, COLOR_PAIR, ERR,
+    init_pair, mvwinch, mvwprintw, new_panel, newwin, nodelay, noecho, overlay, overwrite,
+    pair_content, refresh, savetty, start_color, stdscr, timeout, update_panels,
+    use_default_colors, wattroff, wattron, wgetch, wprintw, A_BOLD, COLORS, COLOR_BLACK,
+    COLOR_PAIR, ERR,
 };
 use once_cell::sync::OnceCell;
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -22,11 +23,7 @@ mod set_deltas;
 static RNG: OnceCell<Mutex<StdRng>> = OnceCell::new();
 
 fn main() {
-    let mut tree = Tree::default();
-
-    if tree.config.seed == 0 {
-        tree.config.seed = rand::thread_rng().gen::<u64>();
-    }
+    let mut tree = Tree::from_args();
 
     RNG.set(Mutex::new(StdRng::seed_from_u64(tree.config.seed)))
         .unwrap();
@@ -62,15 +59,15 @@ fn main() {
         wgetch(tree.objects.tree_win);
         tree.finish();
     }
-
-    loop {
-        sleep(Duration::from_secs(1));
-    }
+    //
+    // loop {
+    //     sleep(Duration::from_secs(1));
+    // }
 }
 
 // print stdscr to terminal window
 fn printstdscr() {
-    todo!()
+    todo!();
 }
 
 #[derive(Default)]
@@ -81,6 +78,14 @@ struct Tree {
 }
 
 impl Tree {
+    fn from_args() -> Self {
+        Self {
+            config: Config::from_args(),
+            objects: NcursesObjects::default(),
+            counters: Counters::default(),
+        }
+    }
+
     fn init(&mut self) {
         savetty();
         noecho();
@@ -184,7 +189,7 @@ impl Tree {
                 self.branch(y, x, BranchType::Dying, life);
             }
             // trunks should re-branch if not close to ground AND either randomly, or upon every <multiplier> steps
-            else if BranchType::Trunk == branch_type && (dice(3)) == 0
+            else if (BranchType::Trunk == branch_type && (dice(3)) == 0)
                 || (life % self.config.multiplier == 0)
             {
                 // if trunk is branching and not about to die, create another trunk with random life
@@ -212,7 +217,7 @@ impl Tree {
                         );
                     }
                     // create shoot
-                    let direction = match dice(2) {
+                    let direction = match self.counters.shoot_counter % 2 {
                         0 => BranchType::ShootLeft,
                         1 => BranchType::ShootRight,
                         _ => BranchType::Dead,
@@ -349,8 +354,9 @@ impl Tree {
         let mut cols = 0;
 
         let (base_width, base_height) = match self.config.base_type {
-            BaseType::Big => (31, 4),
+            BaseType::None => (0, 0),
             BaseType::Small => (15, 3),
+            BaseType::Big => (31, 4),
         };
 
         // calculate where base should go
@@ -394,6 +400,22 @@ impl Tree {
 
     fn draw_base(&self) {
         match self.config.base_type {
+            BaseType::None => {}
+            BaseType::Small => {
+                wattron(self.objects.base_win, COLOR_PAIR(8));
+                wprintw(self.objects.base_win, "(");
+                wattron(self.objects.base_win, COLOR_PAIR(2));
+                wprintw(self.objects.base_win, "---");
+                wattron(self.objects.base_win, COLOR_PAIR(11));
+                wprintw(self.objects.base_win, "./~~~\\.");
+                wattron(self.objects.base_win, COLOR_PAIR(2));
+                wprintw(self.objects.base_win, "---");
+                wattron(self.objects.base_win, COLOR_PAIR(8));
+                wprintw(self.objects.base_win, ")");
+
+                mvwprintw(self.objects.base_win, 1, 0, " (           ) ");
+                mvwprintw(self.objects.base_win, 2, 0, "  (_________)  ");
+            }
             BaseType::Big => {
                 wattron(self.objects.base_win, A_BOLD() | COLOR_PAIR(8));
                 wprintw(self.objects.base_win, ":");
@@ -421,21 +443,6 @@ impl Tree {
                 mvwprintw(self.objects.base_win, 3, 0, "  (_)                     (_)");
 
                 wattroff(self.objects.base_win, A_BOLD());
-            }
-            BaseType::Small => {
-                wattron(self.objects.base_win, COLOR_PAIR(8));
-                wprintw(self.objects.base_win, "(");
-                wattron(self.objects.base_win, COLOR_PAIR(2));
-                wprintw(self.objects.base_win, "---");
-                wattron(self.objects.base_win, COLOR_PAIR(11));
-                wprintw(self.objects.base_win, "./~~~\\.");
-                wattron(self.objects.base_win, COLOR_PAIR(2));
-                wprintw(self.objects.base_win, "---");
-                wattron(self.objects.base_win, COLOR_PAIR(8));
-                wprintw(self.objects.base_win, ")");
-
-                mvwprintw(self.objects.base_win, 1, 0, " (           ) ");
-                mvwprintw(self.objects.base_win, 2, 0, "  (_________)  ");
             }
         }
     }
@@ -465,7 +472,7 @@ fn update_screen(time_step: u64) {
     update_panels();
     doupdate();
     if time_step > 0 {
-        sleep(Duration::from_micros(time_step));
+        sleep(Duration::from_millis(time_step));
     }
 }
 fn dice(sides: i32) -> i32 {
